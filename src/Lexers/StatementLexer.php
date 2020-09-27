@@ -38,7 +38,10 @@ class StatementLexer implements Lexer
                     $statements[] = $this->analyzeDispatch($statement);
                     break;
                 case 'send':
-                    $statements[] = $this->analyzeMail($statement);
+                    $statements[] = $this->analyzeSend($statement);
+                    break;
+                case 'notify':
+                    $statements[] = $this->analyzeNotify($statement);
                     break;
                 case 'validate':
                     $statements[] = $this->analyzeValidate($statement);
@@ -53,10 +56,12 @@ class StatementLexer implements Lexer
                     $statements[] = $this->analyzeResource($statement);
                     break;
                 case 'save':
-                case 'update':
                 case 'delete':
                 case 'find':
                     $statements[] = new EloquentStatement($command, $statement);
+                    break;
+                case 'update':
+                    $statements[] = $this->analyzeUpdate($statement);
                     break;
                 case 'flash':
                 case 'store':
@@ -101,7 +106,7 @@ class StatementLexer implements Lexer
         return new RespondStatement($statement);
     }
 
-    private function analyzeMail($statement)
+    private function analyzeSend($statement)
     {
         $to = null;
 
@@ -118,7 +123,24 @@ class StatementLexer implements Lexer
             $data = preg_split('/,([ \t]+)?/', substr($with, 5));
         }
 
-        return new SendStatement($object, $to, $data);
+        $type = SendStatement::TYPE_MAIL;
+        if (Str::endsWith($object, 'Notification')) {
+            $type = SendStatement::TYPE_NOTIFICATION_WITH_FACADE;
+        }
+
+        return new SendStatement($object, $to, $data, $type);
+    }
+
+    private function analyzeNotify($statement)
+    {
+        [$model, $notification, $with] = $this->extractTokens($statement, 3);
+
+        $data = [];
+        if (!empty($with)) {
+            $data = preg_split('/,([ \t]+)?/', substr($with, 5));
+        }
+
+        return new SendStatement($notification, $model, $data, SendStatement::TYPE_NOTIFICATION_WITH_MODEL);
     }
 
     private function analyzeValidate($statement)
@@ -178,5 +200,16 @@ class StatementLexer implements Lexer
         }
 
         return new ResourceStatement($reference, !is_null($collection), $collection === 'paginate');
+    }
+
+    private function analyzeUpdate($statement)
+    {
+        if (!Str::contains($statement, ',')) {
+            return new EloquentStatement('update', $statement);
+        }
+
+        $columns = preg_split('/,([ \t]+)?/', $statement);
+
+        return new EloquentStatement('update', null, $columns);
     }
 }

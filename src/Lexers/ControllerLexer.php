@@ -29,13 +29,17 @@ class ControllerLexer implements Lexer
         foreach ($tokens['controllers'] as $name => $definition) {
             $controller = new Controller($name);
 
-            if ($this->isResource($definition)) {
-                $original = $definition;
-                $definition = $this->generateResourceTokens($controller, $this->methodsForResource($definition['resource']));
-                // unset shorthand
-                unset($original['resource']);
-                // this gives the ability to both use a shorthand and override some methods
-                $definition = array_merge($definition, $original);
+            if (isset($definition['resource'])) {
+                $resource_methods = $this->methodsForResource($definition['resource']);
+                $resource_definition = $this->generateResourceTokens($controller, $resource_methods);
+
+                if ($this->hasOnlyApiResourceMethods($resource_methods)) {
+                    $controller->setApiResource(true);
+                }
+
+                unset($definition['resource']);
+
+                $definition = array_merge($resource_definition, $definition);
             }
 
             foreach ($definition as $method => $body) {
@@ -46,11 +50,6 @@ class ControllerLexer implements Lexer
         }
 
         return $registry;
-    }
-
-    private function isResource(array $definition)
-    {
-        return isset($definition['resource']) && is_string($definition['resource']);
     }
 
     private function generateResourceTokens(Controller $controller, array $methods)
@@ -66,7 +65,7 @@ class ControllerLexer implements Lexer
 
                         return str_replace(
                             ['[singular]', '[plural]'],
-                            [Str::lower($model), Str::lower(Str::plural($model))],
+                            [Str::camel($model), Str::camel(Str::plural($model))],
                             $statement
                         );
                     }),
@@ -107,7 +106,6 @@ class ControllerLexer implements Lexer
                 'delete' => '[singular]',
                 'redirect' => '[singular].index',
             ],
-
             'api.index' => [
                 'query' => 'all:[plural]',
                 'resource' => 'collection:[plural]',
@@ -127,7 +125,7 @@ class ControllerLexer implements Lexer
             ],
             'api.destroy' => [
                 'delete' => '[singular]',
-                'respond' => 200,
+                'respond' => 204,
             ],
         ];
     }
@@ -138,10 +136,17 @@ class ControllerLexer implements Lexer
             return ['api.index', 'api.store', 'api.show', 'api.update', 'api.destroy'];
         }
 
-        if ($type === 'all') {
+        if ($type === 'web') {
             return ['index', 'create', 'store', 'show', 'edit', 'update', 'destroy'];
         }
 
-        return array_map('trim', explode(',', $type));
+        return array_map('trim', explode(',', strtolower($type)));
+    }
+
+    private function hasOnlyApiResourceMethods(array $methods)
+    {
+        return collect($methods)->every(function ($item, $key) {
+            return Str::startsWith($item, 'api.');
+        });
     }
 }

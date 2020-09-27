@@ -113,7 +113,7 @@ class ControllerLexerTest extends TestCase
         $tokens = [
             'controllers' => [
                 'Comment' => [
-                    'resource' => 'all'
+                    'resource' => 'web'
                 ]
             ]
         ];
@@ -202,7 +202,7 @@ class ControllerLexerTest extends TestCase
         $tokens = [
             'controllers' => [
                 'Comment' => [
-                    'resource' => 'api'
+                    'resource' => 'api.index, api.store, api.show, api.update'
                 ]
             ]
         ];
@@ -232,12 +232,6 @@ class ControllerLexerTest extends TestCase
                 'resource' => 'comment'
             ])
             ->andReturn(['api-update-statements']);
-        $this->statementLexer->expects('analyze')
-            ->with([
-                'delete' => 'comment',
-                'respond' => 200
-            ])
-            ->andReturn(['api-destroy-statements']);
 
         $actual = $this->subject->analyze($tokens);
 
@@ -245,9 +239,10 @@ class ControllerLexerTest extends TestCase
 
         $controller = $actual['controllers']['Comment'];
         $this->assertEquals('CommentController', $controller->className());
+        $this->assertTrue($controller->isApiResource());
 
         $methods = $controller->methods();
-        $this->assertCount(5, $methods);
+        $this->assertCount(4, $methods);
 
         $this->assertCount(1, $methods['index']);
         $this->assertEquals('api-index-statements', $methods['index'][0]);
@@ -257,8 +252,6 @@ class ControllerLexerTest extends TestCase
         $this->assertEquals('api-show-statements', $methods['show'][0]);
         $this->assertCount(1, $methods['update']);
         $this->assertEquals('api-update-statements', $methods['update'][0]);
-        $this->assertCount(1, $methods['destroy']);
-        $this->assertEquals('api-destroy-statements', $methods['destroy'][0]);
     }
 
     /**
@@ -378,5 +371,54 @@ class ControllerLexerTest extends TestCase
         $this->assertEquals('show-statements', $methods['show'][0]);
         $this->assertCount(1, $methods['custom']);
         $this->assertEquals('custom-statements', $methods['custom'][0]);
+    }
+
+    /**
+     * @test
+     */
+    public function it_returns_a_resource_controllers_with_api_flag_set()
+    {
+        $tokens = [
+            'controllers' => [
+                'Page' => [
+                    'resource' => 'web',
+                ],
+                'File' => [
+                    'resource' => 'api',
+                ],
+                'Category' => [
+                    'resource' => 'web',
+                ],
+                'Gallery' => [
+                    'resource' => 'api',
+                ],
+            ]
+        ];
+
+        $this->statementLexer->shouldReceive('analyze');
+
+        $actual = $this->subject->analyze($tokens);
+
+        $this->assertCount(4, $actual['controllers']);
+
+        $controller = $actual['controllers']['Page'];
+        $this->assertEquals('PageController', $controller->className());
+        $this->assertCount(7, $controller->methods());
+        $this->assertFalse($controller->isApiResource());
+
+        $controller = $actual['controllers']['File'];
+        $this->assertEquals('FileController', $controller->className());
+        $this->assertCount(5, $controller->methods());
+        $this->assertTrue($controller->isApiResource());
+
+        $controller = $actual['controllers']['Category'];
+        $this->assertEquals('CategoryController', $controller->className());
+        $this->assertCount(7, $controller->methods());
+        $this->assertFalse($controller->isApiResource());
+
+        $controller = $actual['controllers']['Gallery'];
+        $this->assertEquals('GalleryController', $controller->className());
+        $this->assertCount(5, $controller->methods());
+        $this->assertTrue($controller->isApiResource());
     }
 }

@@ -5,7 +5,7 @@ namespace Blueprint\Commands;
 use Blueprint\Blueprint;
 use Illuminate\Console\Command;
 use Illuminate\Filesystem\Filesystem;
-use Symfony\Component\Console\Input\InputArgument;
+use Illuminate\Support\Facades\Artisan;
 
 class EraseCommand extends Command
 {
@@ -46,8 +46,9 @@ class EraseCommand extends Command
     {
         $contents = $this->files->get('.blueprint');
 
-        $blueprint = new Blueprint();
-        $generated = $blueprint->parse($contents);
+        $blueprint = resolve(Blueprint::class);
+
+        $generated = $blueprint->parse($contents, false);
 
         collect($generated)->each(function ($files, $action) {
             if ($action === 'created') {
@@ -60,7 +61,7 @@ class EraseCommand extends Command
             }
 
             collect($files)->each(function ($file) {
-                $this->line('- ' . $file);
+                $this->line('- '.$file);
             });
 
             $this->line('');
@@ -70,28 +71,8 @@ class EraseCommand extends Command
         unset($generated['updated']);
 
         $this->files->put('.blueprint', $blueprint->dump($generated));
-    }
 
-    /**
-     * Get the console command arguments.
-     *
-     * @return array
-     */
-    protected function getArguments()
-    {
-        return [
-            ['draft', InputArgument::OPTIONAL | InputArgument::IS_ARRAY, 'Which models to include', []],
-        ];
-    }
-
-    /**
-     * Get the console command options.
-     *
-     * @return array
-     */
-    protected function getOptions()
-    {
-        return [];
+        $this->call('blueprint:trace');
     }
 
     private function outputStyle($action)
